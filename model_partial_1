@@ -1,0 +1,286 @@
+import pandas as pd
+import snowflake.connector 
+import json
+from time import time 
+import numpy as np
+import requests
+import asyncio
+import json
+import sys
+import aiohttp
+import time
+import ast
+from aiodecorators import Semaphore
+
+
+
+user='ajaykumar'
+password='ajaykujA1@'
+account='zra37574'
+warehouse='HEVOPROD_WH'
+database='HEVOPROD_DB'
+schema='HEVOPROD_SCH'
+role = 'SYSADMIN'
+SEED = 1
+
+
+ctx = snowflake.connector.connect(
+    user=user,
+    password=password,
+    account=account,
+    warehouse=warehouse,
+    database=database,
+    schema=schema,
+    role=role
+)
+cur = ctx.cursor()
+
+temp_all_dfs=[]
+
+try:
+
+    cur.execute(" SELECT prd_order._ID, prd_order.DELIVERYADDRESS_CITY,prd_order.PICKUPADDRESS_ZIPCODE,prd_order.PICKUPADDRESS_STATE,\
+    prd_order.PICKUPADDRESS_CITY,prd_order.DELIVERYADDRESS_STATE,prd_order.DELIVERYADDRESS_ZIPCODE,prd_order.TENANTID,\
+    prd_order.PROVIDER,prd_order.DELIVERYADDRESS_COUNTRY,prd_order.PICKUPADDRESS_COUNTRY,prd_order.DELIVERYADDRESS_REPORTLATITUDE,\
+    prd_order.DELIVERYADDRESS_REPORTLONGITUDE,prd_order.PICKUPADDRESS_LATITUDE,prd_order.PICKUPADDRESS_LONGITUDE,prd_order.DROPOFFTIMESTARTSAT as DROPOFFWINDOW_STARTS, prd_order.DROPOFFTIMEENDSAT as DROPOFFWINDOW_ENDS,  prd_order.PICKUPTIMESTARTSAT as PICKUPWINDOW_STARTS,prd_order.PICKUPTIMEENDSAT as PICKUPWINDOW_ENDS,\
+    prd_order.HASPERISHABLEITEMS,prd_order.HASREFRIGERATEDITEMS,prd_order.ISBEERORWINE,prd_order.ISFRAGILE,prd_order.ISTOBACCO,prd_order.STATUS\
+    FROM PRD_ORDER where ISPICKUPASAP='TRUE' AND ISDROPOFFASAP='FALSE' AND TYPE='delivery' AND STATUS='ORDER_DELIVERED' and DROPOFFWINDOW_STARTS IS NOT NULL AND LASTUPDATEDAT between '2022-10-01 10:00:00' AND\
+    current_timestamp and DELIVERYADDRESS_CITY is not NULL AND PICKUPADDRESS_ZIPCODE IS NOT NULL AND PICKUPADDRESS_STATE IS NOT NULL AND PICKUPADDRESS_CITY IS NOT NULL AND DELIVERYADDRESS_STATE IS NOT NULL AND DELIVERYADDRESS_ZIPCODE IS NOT NULL AND TENANTID IS NOT NULL AND PROVIDER IS NOT NULL AND DELIVERYADDRESS_COUNTRY IS NOT NULL AND PICKUPADDRESS_COUNTRY IS NOT NULL   ")
+    
+    for df in cur.fetch_pandas_batches():
+        temp_all_dfs.append(df)
+
+    
+
+    order_data = pd.concat(temp_all_dfs, ignore_index=True)
+
+    print(order_data.head())
+
+    #print(order_data.shape)
+
+    #print(order_data.head())
+
+    """query 2 which generates the actual order dispatched & order completed time in epochs"""
+ 
+    temp_status=[]
+
+    cur.execute("select t1._ID ,t1.PICKUPADDRESS_ZIPCODE,t1.DELIVERYADDRESS_ZIPCODE,t1.TENANTID,\
+    t1.PROVIDER,t1.DELIVERYADDRESS_COUNTRY,t1.PICKUPADDRESS_COUNTRY,t1.STATUS,t2.STATUS as TERMINAL_STATUS ,t2.UPDATEDATEPOCH as  ORDER_STATUS_FLOW\
+    FROM  identifier('HEVOPROD_DB.HEVOPROD_SCH.PRD_ORDER')  as t1\
+    inner join  identifier ('HEVOPROD_DB.HEVOPROD_SCH.PRD_STATUS') as t2\
+    on t1._ID=t2.ORDERID where t1.ISPICKUPASAP='TRUE' AND  PICKUPADDRESS_COUNTRY = 'US' and DELIVERYADDRESS_COUNTRY = 'US'  and ISDROPOFFASAP='FALSE' AND t1.DROPOFFTIMESTARTSAT is not null and t1.STATUS='ORDER_DELIVERED'and t1.LASTUPDATEDAT between '2022-10-01 10:00:00' AND current_timestamp and t1.DELIVERYADDRESS_CITY is not NULL AND t1.PICKUPADDRESS_ZIPCODE IS NOT NULL AND t1.PICKUPADDRESS_STATE IS NOT NULL AND t1.PICKUPADDRESS_CITY IS NOT NULL AND DELIVERYADDRESS_STATE IS NOT NULL AND t1.DELIVERYADDRESS_ZIPCODE IS NOT NULL AND t1.TENANTID IS NOT NULL AND t1.PROVIDER IS NOT NULL AND t1.DELIVERYADDRESS_COUNTRY IS NOT NULL AND t1.PICKUPADDRESS_COUNTRY IS NOT NULL  ")
+
+    order_status = pd.DataFrame.from_records(iter(cur), columns=[x[0] for x in cur.description])
+
+    #print(order_status.shape)
+
+
+    """fetching the actual pickup time completed  &  actual order delivered time """
+
+
+    filter_actual_val=order_status[(order_status['TERMINAL_STATUS']=='ORDER_DISPATCHED') | (order_status['TERMINAL_STATUS']=='PICKUP_COMPLETED') | (order_status['TERMINAL_STATUS']=='ORDER_DELIVERED')  ]
+
+    #print(filter_actual_val.shape)
+
+    #dispatched orders
+
+    filter_actual_val_dispatch=filter_actual_val[filter_actual_val['TERMINAL_STATUS']=='ORDER_DISPATCHED']
+
+    #print(filter_actual_val_dispatch.head())
+
+    #pickup orders
+
+    filter_actual_val_pickup=filter_actual_val[filter_actual_val['TERMINAL_STATUS']=='PICKUP_COMPLETED']
+
+    #delivered orders 
+        
+    filter_actual_val_delivered=filter_actual_val[filter_actual_val['TERMINAL_STATUS']=='ORDER_DELIVERED']
+
+    #print(filter_actual_val_delivered.shape)
+
+    order_dispatched=filter_actual_val_dispatch[['_ID','TERMINAL_STATUS','ORDER_STATUS_FLOW']]
+    order_dispatched.rename(columns = {'ORDER_STATUS_FLOW':'ORDER_DISPATCHED'}, inplace = True)
+    pickup_completed=filter_actual_val_pickup[['_ID','TERMINAL_STATUS','ORDER_STATUS_FLOW']]
+    pickup_completed.rename(columns = {'ORDER_STATUS_FLOW':'actual_pickup_completed'}, inplace = True)
+    order_delivered=filter_actual_val_delivered[['_ID','TERMINAL_STATUS','ORDER_STATUS_FLOW']]
+    order_delivered.rename(columns = {'ORDER_STATUS_FLOW':'actual_order_delivered'}, inplace = True)
+
+    merge=order_dispatched.merge(pickup_completed,on='_ID')
+    merge_df=merge.merge(order_delivered,on='_ID')
+
+    print(merge_df.head())
+    
+    final_op=merge_df[['_ID','ORDER_DISPATCHED','actual_pickup_completed','actual_order_delivered','TERMINAL_STATUS']]
+
+    necessary_df=final_op[['_ID','ORDER_DISPATCHED','actual_pickup_completed','actual_order_delivered']]
+
+    cols_to_be_added=["PICKUP_COMPLETED","DRIVER_LAT","DRIVER_LON"]
+
+    for i in cols_to_be_added:
+        necessary_df[i]=np.nan
+
+    final_input=order_data.merge(necessary_df,on='_ID')
+    
+    
+
+    #print(final_input.head())
+
+    print("actual_values_data ",final_input.shape)
+
+    def convert_list(x):
+        return [str(x)]
+
+
+
+    """convert the csv into model-json format """
+
+
+    test_records=final_input
+
+    
+    #do preprocessing 
+    
+    print("inside test_records",test_records.shape)
+
+    test_records=test_records.fillna("")
+
+    test_records.replace(np.nan,"",inplace=True)
+
+    test_records['PROVIDER']=test_records['PROVIDER'].apply(convert_list)
+
+    print(test_records.head(),"after handling values")
+
+
+
+
+
+    cols=['PICKUPADDRESS_ZIPCODE','DELIVERYADDRESS_ZIPCODE',
+      'DELIVERYADDRESS_REPORTLATITUDE','DELIVERYADDRESS_REPORTLONGITUDE','PICKUPADDRESS_LATITUDE','PICKUPADDRESS_LONGITUDE','ORDER_DISPATCHED','PICKUPWINDOW_STARTS','DROPOFFWINDOW_ENDS']
+
+     #test_records=test_records.astype('str')
+    for i in cols:
+        test_records[i]=test_records[i].astype(str)
+    
+    print(test_records.info(),"infoooooo")
+    
+    test_records['len_pickup']=test_records['PICKUPADDRESS_ZIPCODE'].str.len()
+    test_records['len_delivery']=test_records['DELIVERYADDRESS_ZIPCODE'].str.len()
+    test_records=test_records[(test_records['len_pickup']==5) & (test_records['len_delivery']==5) ]
+    
+    print(test_records.shape,"before zipcode")
+    test_records=test_records[(test_records['PICKUPADDRESS_ZIPCODE'] != '06476')] 
+    test_records=test_records[(test_records['DELIVERYADDRESS_ZIPCODE'] != '06476')]  
+    print(test_records.shape,"after zipcode")
+    print(test_records.shape,"before")
+
+    
+
+    #check duplicates 
+    Y=test_records
+    
+
+    Y.to_csv("before_duplicate_schedule.csv",index=False)
+
+    Y=test_records.drop_duplicates(subset=['_ID'])
+
+    Y.to_csv("preprocessed_input_new_model_usecase3_v2.csv",index=False)
+   
+    
+    Y=Y.head(5)
+
+    print(Y.shape,"after removing ")
+    
+    input_rec=Y.to_dict('records')
+
+
+
+    
+
+    #calling the cognida model 
+    
+    url = "http://44.226.36.190:7700/delivery_prediction"
+
+    bodies=input_rec
+    
+    @Semaphore(10)
+    async def get(body, session):
+        global err_ids
+        
+        try:
+            #list_of_responses=[]
+            async with session.post(url=url, json=body) as response:
+                resp = await response.json() #it will wait
+
+
+
+               
+
+                
+                # print(resp.decode("utf-8") )
+                #list_of_responses.append(k)
+                #print("Successfully got url {} with resp of length {}.".format(url, len(resp)))
+                #print(resp)
+            
+            #responses_final=pd.DataFrame.from_dict(list_of_responses)
+            #responses_final.to_csv("responses_final1.csv",index=False)
+            if  'prediction_response' in resp:
+                #resp[0]['order_id']=body['_ID']
+                return {"response":resp['prediction_response'],"valid":True}
+            else:
+                #return ast.literal_eval(resp)
+                return  {"response":json.dumps(resp),"valid":False} #"order_id":body['_ID']
+               
+        
+        except Exception as e:
+            print(body)
+            err_ids.append([body['_ID'], f"{str(e)}"])
+            print(err_ids)
+           # errors_ids.append(x)
+            
+            print(f"{str(e)}")
+            print("Unable to get url {} due to {}.".format(url, e.__class__))
+            print(e.__doc__)
+        # print(str(e))
+
+
+    async def main():
+        global err_ids
+        async with aiohttp.ClientSession() as session:
+            try:
+    
+                ret = await asyncio.gather(*[get(req_body, session) for req_body in bodies], return_exceptions=True)  #
+                valid_responses = [ ele["response"] for ele in ret if "valid" in ele and ele["valid"] ]
+                invalid_responses = [ ele["response"] for ele in ret if "valid" in ele and not(ele["valid"]) ]
+                final_resp_valid = []
+                final_resp_invalid=[]
+                for ele in valid_responses:
+                    final_resp_valid.extend(ele)
+                for ele in invalid_responses:
+                    final_resp_invalid.append(ele)
+
+
+                final_response=pd.DataFrame(final_resp_valid)
+
+                print("final_response",final_response.head())
+
+
+                final_response.to_csv('final_response_new_usecase3_v2.csv',index=False)
+                
+                
+                print("Finalized all. Return is a list of len {} outputs.".format(len(ret)))
+                print("Finalized all. Return is a list of len {} outputs.".format(len(valid_responses)))
+                print("Finalized all. Return is a list of len {} outputs.".format(len(invalid_responses)))
+
+                print(final_resp_invalid)
+               
+
+            except Exception as e:
+                print(f"{str(e)}")
+                print("Unable to get url {} due to {}.".format(url, e.__class__))
+        
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main()) 
+           
+
+except:
+    print("Unable to get url ")
