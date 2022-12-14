@@ -46,8 +46,8 @@ try:
     prd_order.PROVIDER,prd_order.DELIVERYADDRESS_COUNTRY,prd_order.PICKUPADDRESS_COUNTRY,prd_order.DELIVERYADDRESS_REPORTLATITUDE,\
     prd_order.DELIVERYADDRESS_REPORTLONGITUDE,prd_order.PICKUPADDRESS_LATITUDE,prd_order.PICKUPADDRESS_LONGITUDE,\
     prd_order.HASPERISHABLEITEMS,prd_order.HASREFRIGERATEDITEMS,prd_order.ISBEERORWINE,prd_order.ISFRAGILE,prd_order.ISTOBACCO,prd_order.STATUS\
-    FROM PRD_ORDER where ISPICKUPASAP='TRUE' AND ISDROPOFFASAP='TRUE' AND PICKUPADDRESS_COUNTRY = 'US' and DELIVERYADDRESS_COUNTRY = 'US' AND TYPE='delivery' AND STATUS='ORDER_DELIVERED' and LASTUPDATEDAT between '2022-10-01 10:00:00' AND\
-    current_timestamp ")
+    FROM PRD_ORDER where ISPICKUPASAP='TRUE' AND ISDROPOFFASAP='TRUE' AND PICKUPADDRESS_COUNTRY = 'US' and DELIVERYADDRESS_COUNTRY = 'US' AND TYPE='delivery' AND STATUS='ORDER_DELIVERED' and LASTUPDATEDAT between '2022-11-01 10:00:00' AND\
+    '2022-11-30 10:00:00' ")
     
     for df in cur.fetch_pandas_batches():
         temp_all_dfs.append(df)
@@ -66,7 +66,7 @@ try:
     t1.PROVIDER,t1.DELIVERYADDRESS_COUNTRY,t1.PICKUPADDRESS_COUNTRY,t1.STATUS,t2.STATUS as TERMINAL_STATUS ,t2.UPDATEDATEPOCH as  ORDER_STATUS_FLOW\
     FROM  identifier('HEVOPROD_DB.HEVOPROD_SCH.PRD_ORDER')  as t1\
     inner join  identifier ('HEVOPROD_DB.HEVOPROD_SCH.PRD_STATUS') as t2\
-    on t1._ID=t2.ORDERID where t1.ISPICKUPASAP='TRUE'  AND ISDROPOFFASAP='TRUE'  AND  t1.STATUS='ORDER_DELIVERED'and t1.LASTUPDATEDAT between '2022-10-01 10:00:00' AND current_timestamp ")
+    on t1._ID=t2.ORDERID where t1.ISPICKUPASAP='TRUE'  AND ISDROPOFFASAP='TRUE'  AND  t1.STATUS='ORDER_DELIVERED'and t1.LASTUPDATEDAT between '2022-10-01 10:00:00' AND '2022-11-30 10:00:00'" )
 
     order_status = pd.DataFrame.from_records(iter(cur), columns=[x[0] for x in cur.description])
 
@@ -182,7 +182,6 @@ try:
 
 
     
-
     #calling the cognida model 
     
     url = "http://44.226.36.190:7700/delivery_prediction"
@@ -198,6 +197,8 @@ try:
             async with session.post(url=url, json=body) as response:
                 resp = await response.json() #it will wait
 
+
+
                
 
                 
@@ -209,15 +210,14 @@ try:
             #responses_final=pd.DataFrame.from_dict(list_of_responses)
             #responses_final.to_csv("responses_final1.csv",index=False)
             if  'prediction_response' in resp:
+
+                resp["prediction_response"][0]['order_id']=body['_ID']
                 return {"response":resp['prediction_response'],"valid":True}
             else:
                 #return ast.literal_eval(resp)
-                return  {"response":json.dumps(resp),"valid":False}
+                return  {"response":json.dumps(resp),"valid":False,"order_id":body['_ID']}
                
-            
-            
-
-
+        
         except Exception as e:
             print(body)
             err_ids.append([body['_ID'], f"{str(e)}"])
@@ -243,12 +243,21 @@ try:
                 for ele in valid_responses:
                     final_resp_valid.extend(ele)
                 for ele in invalid_responses:
-                    final_resp_invalid.extend(ele)
+                    final_resp_invalid.append(ele)
 
 
                 final_response=pd.DataFrame(final_resp_valid)
-                final_response.to_csv('final_response_new_model_v2.csv',index=False)
+
+                print("final_response",final_response.head())
+
+
+                final_response.to_csv('final_response_new_usecase_asap2.csv',index=False)
+                
+                
                 print("Finalized all. Return is a list of len {} outputs.".format(len(ret)))
+                print("Finalized all. Return is a list of len {} outputs.".format(len(valid_responses)))
+                print("Finalized all. Return is a list of len {} outputs.".format(len(invalid_responses)))
+
                 print(final_resp_invalid)
                
 
@@ -262,9 +271,3 @@ try:
 
 except:
     print("Unable to get url ")
-finally: 
-    print(err_ids)
-
-   
-
-
