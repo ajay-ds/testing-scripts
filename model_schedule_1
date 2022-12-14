@@ -44,8 +44,8 @@ try:
     prd_order.PROVIDER,prd_order.DELIVERYADDRESS_COUNTRY,prd_order.PICKUPADDRESS_COUNTRY,prd_order.DELIVERYADDRESS_REPORTLATITUDE,\
     prd_order.DELIVERYADDRESS_REPORTLONGITUDE,prd_order.PICKUPADDRESS_LATITUDE,prd_order.PICKUPADDRESS_LONGITUDE,prd_order.DROPOFFTIMESTARTSAT as DROPOFFWINDOW_STARTS, prd_order.DROPOFFTIMEENDSAT as DROPOFFWINDOW_ENDS,  prd_order.PICKUPTIMESTARTSAT as PICKUPWINDOW_STARTS,prd_order.PICKUPTIMEENDSAT as PICKUPWINDOW_ENDS,\
     prd_order.HASPERISHABLEITEMS,prd_order.HASREFRIGERATEDITEMS,prd_order.ISBEERORWINE,prd_order.ISFRAGILE,prd_order.ISTOBACCO,prd_order.STATUS\
-    FROM PRD_ORDER where ISPICKUPASAP='FALSE' AND ISDROPOFFASAP='FALSE' AND TYPE='delivery' AND STATUS='ORDER_DELIVERED' and DROPOFFWINDOW_STARTS IS NOT NULL AND LASTUPDATEDAT between '2022-11-01 10:00:00' AND\
-    current_timestamp and DELIVERYADDRESS_CITY is not NULL AND PICKUPADDRESS_ZIPCODE IS NOT NULL AND PICKUPADDRESS_STATE IS NOT NULL AND PICKUPADDRESS_CITY IS NOT NULL AND DELIVERYADDRESS_STATE IS NOT NULL AND DELIVERYADDRESS_ZIPCODE IS NOT NULL AND TENANTID IS NOT NULL AND PROVIDER IS NOT NULL AND DELIVERYADDRESS_COUNTRY IS NOT NULL AND PICKUPADDRESS_COUNTRY IS NOT NULL   ")
+    FROM PRD_ORDER where ISPICKUPASAP='FALSE' AND ISDROPOFFASAP='FALSE' AND TYPE='delivery' AND STATUS='ORDER_DELIVERED' and DROPOFFWINDOW_STARTS IS NOT NULL AND LASTUPDATEDAT between '2022-10-16 10:00:00' AND\
+    '2022-10-20 10:00:00' and DELIVERYADDRESS_CITY is not NULL AND PICKUPADDRESS_ZIPCODE IS NOT NULL AND PICKUPADDRESS_STATE IS NOT NULL AND PICKUPADDRESS_CITY IS NOT NULL AND DELIVERYADDRESS_STATE IS NOT NULL AND DELIVERYADDRESS_ZIPCODE IS NOT NULL AND TENANTID IS NOT NULL AND PROVIDER IS NOT NULL AND DELIVERYADDRESS_COUNTRY IS NOT NULL AND PICKUPADDRESS_COUNTRY IS NOT NULL  ")
     
     for df in cur.fetch_pandas_batches():
         temp_all_dfs.append(df)
@@ -68,10 +68,9 @@ try:
     t1.PROVIDER,t1.DELIVERYADDRESS_COUNTRY,t1.PICKUPADDRESS_COUNTRY,t1.STATUS,t2.STATUS as TERMINAL_STATUS ,t2.UPDATEDATEPOCH as  ORDER_STATUS_FLOW\
     FROM  identifier('HEVOPROD_DB.HEVOPROD_SCH.PRD_ORDER')  as t1\
     inner join  identifier ('HEVOPROD_DB.HEVOPROD_SCH.PRD_STATUS') as t2\
-    on t1._ID=t2.ORDERID where t1.ISPICKUPASAP='FALSE' AND  PICKUPADDRESS_COUNTRY = 'US' and DELIVERYADDRESS_COUNTRY = 'US'  and ISDROPOFFASAP='FALSE' AND t1.DROPOFFTIMESTARTSAT is not null and t1.STATUS='ORDER_DELIVERED'and t1.LASTUPDATEDAT between '2022-11-01 10:00:00' AND current_timestamp and t1.DELIVERYADDRESS_CITY is not NULL AND t1.PICKUPADDRESS_ZIPCODE IS NOT NULL AND t1.PICKUPADDRESS_STATE IS NOT NULL AND t1.PICKUPADDRESS_CITY IS NOT NULL AND DELIVERYADDRESS_STATE IS NOT NULL AND t1.DELIVERYADDRESS_ZIPCODE IS NOT NULL AND t1.TENANTID IS NOT NULL AND t1.PROVIDER IS NOT NULL AND t1.DELIVERYADDRESS_COUNTRY IS NOT NULL AND t1.PICKUPADDRESS_COUNTRY IS NOT NULL  ")
+    on t1._ID=t2.ORDERID where t1.ISPICKUPASAP='FALSE' AND  PICKUPADDRESS_COUNTRY = 'US' and DELIVERYADDRESS_COUNTRY = 'US'  and ISDROPOFFASAP='FALSE' AND t1.DROPOFFTIMESTARTSAT is not null and t1.STATUS='ORDER_DELIVERED'and t1.LASTUPDATEDAT between '2022-10-16 10:00:00' AND '2022-10-20 10:00:00' and t1.DELIVERYADDRESS_CITY is not NULL AND t1.PICKUPADDRESS_ZIPCODE IS NOT NULL AND t1.PICKUPADDRESS_STATE IS NOT NULL AND t1.PICKUPADDRESS_CITY IS NOT NULL AND DELIVERYADDRESS_STATE IS NOT NULL AND t1.DELIVERYADDRESS_ZIPCODE IS NOT NULL AND t1.TENANTID IS NOT NULL AND t1.PROVIDER IS NOT NULL AND t1.DELIVERYADDRESS_COUNTRY IS NOT NULL AND t1.PICKUPADDRESS_COUNTRY IS NOT NULL ")
 
    
-
     order_status = pd.DataFrame.from_records(iter(cur), columns=[x[0] for x in cur.description])
 
     #print(order_status.shape)
@@ -181,14 +180,19 @@ try:
     Y=test_records
     
 
-    Y.to_csv("before_duplicate_schedule.csv",index=False)
+
+    #Y.to_csv("before_duplicate_schedule.csv",index=False)
 
     Y=test_records.drop_duplicates(subset=['_ID'])
 
-    Y.to_csv("preprocessed_input_new_model_parrtial_2_v2.csv",index=False)
+    
    
     
+    Y=Y.sample(10000)
+
     
+
+    Y.to_csv("final_final_v2_preprocessed_input_new_model_usecase5.4_v2.csv",index=False)
 
     print(Y.shape,"after removing ")
     
@@ -196,9 +200,9 @@ try:
 
 
 
-    
+    #input_rec={'_ID': '6350b0475d02f5b021081a99', 'DELIVERYADDRESS_CITY': 'San Diego', 'PICKUPADDRESS_ZIPCODE': '91915', 'PICKUPADDRESS_STATE': 'CA', 'PICKUPADDRESS_CITY': 'Chula Vista', 'DELIVERYADDRESS_STATE': 'CA', 'DELIVERYADDRESS_ZIPCODE': '92114', 'TENANTID': 'sephora_us', 'PROVIDER': ['Uber'], 'DELIVERYADDRESS_COUNTRY': 'US', 'PICKUPADDRESS_COUNTRY': 'US', 'DELIVERYADDRESS_REPORTLATITUDE': '32.6906752', 'DELIVERYADDRESS_REPORTLONGITUDE': '-117.053503', 'PICKUPADDRESS_LATITUDE': '32.6238402', 'PICKUPADDRESS_LONGITUDE': '-116.9669791', 'DROPOFFWINDOW_STARTS': 1666292400000.0, 'DROPOFFWINDOW_ENDS': '1666324800000.0', 'PICKUPWINDOW_STARTS': '1666292400000.0', 'PICKUPWINDOW_ENDS': 1666321200000.0, 'HASPERISHABLEITEMS': '', 'HASREFRIGERATEDITEMS': '', 'ISBEERORWINE': '', 'ISFRAGILE': '', 'ISTOBACCO': '', 'STATUS': 'ORDER_DELIVERED', 'ORDER_DISPATCHED': '1666232394022.0', 'actual_pickup_completed': 1666293090557.0, 'actual_order_delivered': 1666296086867.0, 'PICKUP_COMPLETED': '', 'DRIVER_LAT': '', 'DRIVER_LON': '', 'len_pickup': 5, 'len_delivery': 5}
 
-    #calling the cognida model 
+    #calling the cognida moel 
     
     url = "http://44.226.36.190:7700/delivery_prediction"
 
@@ -212,12 +216,6 @@ try:
             #list_of_responses=[]
             async with session.post(url=url, json=body) as response:
                 resp = await response.json() #it will wait
-
-
-
-               
-
-                
                 # print(resp.decode("utf-8") )
                 #list_of_responses.append(k)
                 #print("Successfully got url {} with resp of length {}.".format(url, len(resp)))
@@ -227,10 +225,11 @@ try:
             #responses_final.to_csv("responses_final1.csv",index=False)
             if  'prediction_response' in resp:
 
+                resp["prediction_response"][0]['order_id']=body['_ID']
                 return {"response":resp['prediction_response'],"valid":True}
             else:
                 #return ast.literal_eval(resp)
-                return  {"response":json.dumps(resp),"valid":False}
+                return  {"response":json.dumps(resp),"valid":False,"order_id":body['_ID']}
                
         
         except Exception as e:
@@ -242,9 +241,9 @@ try:
             print(f"{str(e)}")
             print("Unable to get url {} due to {}.".format(url, e.__class__))
             print(e.__doc__)
-        # print(str(e))
+        # print(str(e)) """
 
-
+ 
     async def main():
         global err_ids
         async with aiohttp.ClientSession() as session:
@@ -266,7 +265,7 @@ try:
                 print("final_response",final_response.head())
 
 
-                final_response.to_csv('final_response_new_model_partial_2_v2.csv',index=False)
+                final_response.to_csv('final_final_v2_response_new_usecase5.4_v2.csv',index=False)
                 
                 
                 print("Finalized all. Return is a list of len {} outputs.".format(len(ret)))
